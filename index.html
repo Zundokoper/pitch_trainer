@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Pitch Trainer</title>
+<style>
+:root{color-scheme:dark;--bg:#101522;--panel:#1a2335;--muted:#9aa8bd;--text:#f4f7fb;--blue:#75b8ff;--green:#62ddb0;--pink:#ff8caf;--line:#2b3850}
+*{box-sizing:border-box}body{margin:0;background:radial-gradient(ellipse at top,#1c2c48,#101522 60%);color:var(--text);font-family:system-ui,-apple-system,"Segoe UI",sans-serif;min-height:100vh}
+main{max-width:920px;margin:auto;padding:24px 16px 48px}.top{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}.brand{font-weight:800;letter-spacing:.04em;font-size:20px}.brand span{color:var(--blue)}.pill{font-size:12px;color:var(--green);border:1px solid #356e65;padding:6px 10px;border-radius:99px}
+h1{font-size:clamp(27px,5vw,42px);margin:28px 0 8px}.lead{color:var(--muted);margin:0 0 22px}.tabs{display:flex;gap:8px;margin:20px 0}.tab,button,select{font:inherit}.tab,button{border:1px solid var(--line);background:#202c40;color:var(--text);border-radius:12px;padding:11px 15px;cursor:pointer}.tab.active,button.primary{background:#2867a6;border-color:#438dd1}.tab:disabled,button:disabled{opacity:.45;cursor:not-allowed}
+.panel{background:linear-gradient(145deg,#1b263a,#172033);border:1px solid var(--line);border-radius:20px;padding:20px;margin:14px 0;box-shadow:0 12px 35px #0003}.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}.metric{background:#111a2a;border-radius:15px;padding:16px;text-align:center}.label{font-size:12px;color:var(--muted)}.note{font-size:42px;font-weight:800;line-height:1.2;margin:5px}.hz{color:var(--muted);font-variant-numeric:tabular-nums}.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}.row>*{flex:1}.center{text-align:center}.controls{display:flex;gap:9px;flex-wrap:wrap;margin-top:16px}.controls button{flex:1;min-width:130px}.meter{height:14px;background:#0d1523;border-radius:99px;overflow:hidden;position:relative;margin:18px 0 7px}.meter .mid{position:absolute;left:50%;top:0;bottom:0;width:2px;background:#ffffff80}.meter .needle{position:absolute;top:0;bottom:0;width:5px;background:var(--green);left:50%;transform:translateX(-50%);border-radius:5px;transition:left .08s}.scale{display:flex;justify-content:space-between;color:var(--muted);font-size:11px}.status{font-size:18px;font-weight:700;margin:12px 0 2px}.good{color:var(--green)}.bad{color:var(--pink)}.muted{color:var(--muted)}select{background:#111a2a;color:var(--text);border:1px solid var(--line);border-radius:10px;padding:10px;width:100%}.hint{font-size:13px;color:var(--muted);line-height:1.6}.hidden{display:none}.bigbtn{font-size:16px;padding:14px}.score{font-size:30px;font-weight:800;color:var(--green)}footer{color:var(--muted);font-size:12px;text-align:center;margin-top:28px}
+@media(max-width:560px){main{padding:18px 12px 36px}.grid{grid-template-columns:1fr}.panel{padding:16px}.note{font-size:36px}}
+</style>
+</head>
+<body>
+<main>
+ <div class="top"><div class="brand">🎵 <span>PITCH</span> TRAINER</div><div class="pill">BEGINNER MODE</div></div>
+ <h1>音程を、目で見て合わせよう。</h1>
+ <p class="lead">お手本の音を聴いて、声で再現。マイク入力から音程のズレをリアルタイム表示します。</p>
+ <div class="tabs"><button class="tab active" id="liveTab">リアルタイム</button><button class="tab" id="testTab">聴いてから挑戦</button></div>
+ <section class="panel">
+  <div class="row"><div><div class="label">練習する音</div><select id="noteSelect"></select></div><div><div class="label">音域</div><select id="range"><option value="low">低め（C3〜B3）</option><option value="mid" selected>標準（C4〜B4）</option><option value="high">高め（C5〜B5）</option></select></div></div>
+  <div class="grid" style="margin-top:16px">
+   <div class="metric"><div class="label">お手本</div><div class="note" id="targetNote">A4</div><div class="hz" id="targetHz">440.00 Hz</div></div>
+   <div class="metric"><div class="label">あなたの声</div><div class="note" id="voiceNote">—</div><div class="hz" id="voiceHz">マイク未接続</div></div>
+  </div>
+  <div class="center" style="margin-top:18px"><div class="label">音程のズレ（cent）</div><div class="note" id="cents">—</div><div class="hint">0 cent がぴったり。±50 cent以内で半音の範囲です。</div></div>
+  <div class="meter"><div class="mid"></div><div class="needle" id="needle"></div></div><div class="scale"><span>−50</span><span>−25</span><span>0</span><span>＋25</span><span>＋50 cent</span></div>
+  <div class="center"><div class="status" id="feedback">まずはお手本の音を聴こう</div><div class="hint" id="subfeedback">音量を出しすぎず、楽な声で「あー」と伸ばしてみてね。</div></div>
+  <div class="controls"><button class="primary bigbtn" id="playBtn">▶ お手本を鳴らす</button><button class="bigbtn" id="micBtn">🎙 マイクを開始</button><button id="stopBtn" disabled>停止</button></div>
+ </section>
+ <section class="panel" id="testPanel">
+  <div class="label">聴いてから挑戦モード</div><h2 style="margin:6px 0 8px">音を覚えて、歌ってみよう</h2>
+  <p class="hint">お手本を再生したあと、マイクを開始して声を出してください。歌っている間の音程を判定します。</p>
+  <div class="controls"><button class="primary" id="listenBtn">♪ お手本を聴く</button><button id="readyBtn">挑戦スタート</button></div>
+  <div class="center" style="margin-top:15px"><div class="label">今回の正確度（検出できた音のうち ±20 cent以内）</div><div class="score" id="score">—</div><div class="hint" id="scoreDetail">マイクを開始すると計測します。</div></div>
+ </section>
+ <section class="panel"><b>使い方</b><ol class="hint"><li>「お手本を鳴らす」で音を聴きます。</li><li>「マイクを開始」を押して、ブラウザのマイク使用を許可します。</li><li>お手本と同じ高さで「あー」と声を伸ばします。</li><li>ズレが0 centに近づくように声を調整します。</li></ol><p class="hint">※マイクはこのページ内で音程解析に使用します。音声を録音・送信・保存しません。マイク利用にはHTTPSまたはlocalhostが必要な場合があります。</p></section>
+ <footer>Pitch Trainer · Web Audio API / 自分の声で気軽にピッチ練習</footer>
+</main>
+<script>
+const $=id=>document.getElementById(id);
+const names=['C','C♯','D','D♯','E','F','F♯','G','G♯','A','A♯','B'];
+let target=69, audioCtx=null, osc=null, stream=null, analyser=null, raf=null, mode='live', running=false, samples=0, hits=0;
+function freq(m){return 440*Math.pow(2,(m-69)/12)}
+function noteName(m){return names[(m%12+12)%12]+(Math.floor(m/12)-1)}
+function fillNotes(){let base=$('range').value==='low'?48:$('range').value==='high'?72:60;let s=$('noteSelect');s.innerHTML='';for(let i=0;i<12;i++){let m=base+i,o=document.createElement('option');o.value=m;o.textContent=noteName(m);s.append(o)}s.value=target=base+9;updateTarget()}
+function updateTarget(){target=+ $('noteSelect').value;$('targetNote').textContent=noteName(target);$('targetHz').textContent=freq(target).toFixed(2)+' Hz';$('feedback').textContent='お手本を聴いてみよう';$('subfeedback').textContent='同じ高さの声を出してみてね。'}
+function playTone(){const C=window.AudioContext||window.webkitAudioContext;if(!audioCtx)audioCtx=new C();audioCtx.resume();if(osc){try{osc.stop()}catch(e){}}osc=audioCtx.createOscillator();let gain=audioCtx.createGain();osc.type='sine';osc.frequency.value=freq(target);gain.gain.setValueAtTime(.0001,audioCtx.currentTime);gain.gain.exponentialRampToValueAtTime(.22,audioCtx.currentTime+.03);gain.gain.setTargetAtTime(.0001,audioCtx.currentTime+.85,.12);osc.connect(gain);gain.connect(audioCtx.destination);osc.start();osc.stop(audioCtx.currentTime+1.2)}
+function autoCorrelate(buf,sr){let size=buf.length,rms=0;for(let i=0;i<size;i++)rms+=buf[i]*buf[i];rms=Math.sqrt(rms/size);if(rms<.012)return -1;let best=-1,bestCorr=0;for(let lag=sr/1000;lag<sr/65;lag++){let corr=0;for(let i=0;i<size-lag;i++)corr+=buf[i]*buf[i+lag];corr/=size-lag;if(corr>bestCorr){bestCorr=corr;best=lag}}if(best<0||bestCorr<.35)return -1;return sr/best}
+async function startMic(){try{const C=window.AudioContext||window.webkitAudioContext;if(!audioCtx)audioCtx=new C();stream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:false,noiseSuppression:false,autoGainControl:false}});let src=audioCtx.createMediaStreamSource(stream);analyser=audioCtx.createAnalyser();analyser.fftSize=4096;src.connect(analyser);running=true;$('micBtn').disabled=true;$('stopBtn').disabled=false;$('voiceHz').textContent='音を検出中…';let buf=new Float32Array(analyser.fftSize);function loop(){if(!running)return;analyser.getFloatTimeDomainData(buf);let f=autoCorrelate(buf,audioCtx.sampleRate);if(f>0&&f<1200){let midi=69+12*Math.log2(f/440),nearest=Math.round(midi),c=(midi-target)*100;$('voiceNote').textContent=noteName(nearest);$('voiceHz').textContent=f.toFixed(1)+' Hz';$('cents').textContent=(c>0?'+':'')+c.toFixed(0);let clamped=Math.max(-50,Math.min(50,c));$('needle').style.left=(50+clamped)+'%';let ok=Math.abs(c)<=20;$('feedback').textContent=Math.abs(c)<=5?'ぴったり！🎉':ok?'いい感じ！':'もう少し'+(c<0?'高く':'低く');$('feedback').className='status '+(ok?'good':'bad');$('subfeedback').textContent= c<0?'声を少し高くしてみよう。':'声を少し低くしてみよう。';if(mode==='test'&&window.challenge){samples++;if(ok)hits++;$('score').textContent=Math.round(hits/samples*100)+'%';$('scoreDetail').textContent=samples+'回検出 · ±20 cent以内 '+hits+'回'} }else{$('voiceNote').textContent='—';$('voiceHz').textContent='音を検出できません';$('cents').textContent='—';$('needle').style.left='50%';$('feedback').textContent='声を検出できていません';$('subfeedback').textContent='少し長めに「あー」と声を出してみてね。'}raf=requestAnimationFrame(loop)}loop()}catch(e){alert('マイクを開始できませんでした。ブラウザのマイク許可とHTTPS接続を確認してください。\\n'+e.message)}}
+function stopMic(){running=false;if(raf)cancelAnimationFrame(raf);if(stream)stream.getTracks().forEach(t=>t.stop());stream=null;$('micBtn').disabled=false;$('stopBtn').disabled=true;$('voiceNote').textContent='—';$('voiceHz').textContent='マイク未接続'}
+$('range').onchange=fillNotes;$('noteSelect').onchange=updateTarget;$('playBtn').onclick=playTone;$('listenBtn').onclick=playTone;$('micBtn').onclick=startMic;$('stopBtn').onclick=stopMic;
+$('liveTab').onclick=()=>{mode='live';window.challenge=false;$('liveTab').classList.add('active');$('testTab').classList.remove('active');$('testPanel').classList.remove('hidden');$('feedback').textContent='リアルタイムで音程を確認できます'};
+$('testTab').onclick=()=>{mode='test';window.challenge=false;$('testTab').classList.add('active');$('liveTab').classList.remove('active');$('testPanel').classList.remove('hidden');$('feedback').textContent='まずお手本を聴いて覚えよう'};
+$('readyBtn').onclick=()=>{mode='test';window.challenge=true;samples=hits=0;$('score').textContent='0%';$('scoreDetail').textContent='計測中… マイクを開始して歌ってね。';if(!running)startMic()};
+fillNotes();
+</script>
+</body></html>
