@@ -48,8 +48,36 @@ function noteName(m){return names[(m%12+12)%12]+(Math.floor(m/12)-1)}
 function fillNotes(){let base=$('range').value==='low'?48:$('range').value==='high'?72:60;let s=$('noteSelect');s.innerHTML='';for(let i=0;i<12;i++){let m=base+i,o=document.createElement('option');o.value=m;o.textContent=noteName(m);s.append(o)}s.value=target=base+9;updateTarget()}
 function updateTarget(){target=+ $('noteSelect').value;$('targetNote').textContent=noteName(target);$('targetHz').textContent=freq(target).toFixed(2)+' Hz';$('feedback').textContent='お手本を聴いてみよう';$('subfeedback').textContent='同じ高さの声を出してみてね。'}
 function playTone(){const C=window.AudioContext||window.webkitAudioContext;if(!audioCtx)audioCtx=new C();audioCtx.resume();if(osc){try{osc.stop()}catch(e){}}osc=audioCtx.createOscillator();let gain=audioCtx.createGain();osc.type='sine';osc.frequency.value=freq(target);gain.gain.setValueAtTime(.0001,audioCtx.currentTime);gain.gain.exponentialRampToValueAtTime(.22,audioCtx.currentTime+.03);gain.gain.setTargetAtTime(.0001,audioCtx.currentTime+.85,.12);osc.connect(gain);gain.connect(audioCtx.destination);osc.start();osc.stop(audioCtx.currentTime+1.2)}
-function autoCorrelate(buf,sr){let size=buf.length,rms=0;for(let i=0;i<size;i++)rms+=buf[i]*buf[i];rms=Math.sqrt(rms/size);if(rms<.012)return -1;let best=-1,bestCorr=0;for(let lag=sr/1000;lag<sr/65;lag++){let corr=0;for(let i=0;i<size-lag;i++)corr+=buf[i]*buf[i+lag];corr/=size-lag;if(corr>bestCorr){bestCorr=corr;best=lag}}if(best<0||bestCorr<.35)return -1;return sr/best}
-async function startMic(){try{const C=window.AudioContext||window.webkitAudioContext;if(!audioCtx)audioCtx=new C();stream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:false,noiseSuppression:false,autoGainControl:false}});let src=audioCtx.createMediaStreamSource(stream);analyser=audioCtx.createAnalyser();analyser.fftSize=4096;src.connect(analyser);running=true;$('micBtn').disabled=true;$('stopBtn').disabled=false;$('voiceHz').textContent='音を検出中…';let buf=new Float32Array(analyser.fftSize);function loop(){if(!running)return;analyser.getFloatTimeDomainData(buf);let f=autoCorrelate(buf,audioCtx.sampleRate);if(f>0&&f<1200){let midi=69+12*Math.log2(f/440),nearest=Math.round(midi),c=(midi-target)*100;$('voiceNote').textContent=noteName(nearest);$('voiceHz').textContent=f.toFixed(1)+' Hz';$('cents').textContent=(c>0?'+':'')+c.toFixed(0);let clamped=Math.max(-50,Math.min(50,c));$('needle').style.left=(50+clamped)+'%';let ok=Math.abs(c)<=20;$('feedback').textContent=Math.abs(c)<=5?'ぴったり！🎉':ok?'いい感じ！':'もう少し'+(c<0?'高く':'低く');$('feedback').className='status '+(ok?'good':'bad');$('subfeedback').textContent= c<0?'声を少し高くしてみよう。':'声を少し低くしてみよう。';if(mode==='test'&&window.challenge){samples++;if(ok)hits++;$('score').textContent=Math.round(hits/samples*100)+'%';$('scoreDetail').textContent=samples+'回検出 · ±20 cent以内 '+hits+'回'} }else{$('voiceNote').textContent='—';$('voiceHz').textContent='音を検出できません';$('cents').textContent='—';$('needle').style.left='50%';$('feedback').textContent='声を検出できていません';$('subfeedback').textContent='少し長めに「あー」と声を出してみてね。'}raf=requestAnimationFrame(loop)}loop()}catch(e){alert('マイクを開始できませんでした。ブラウザのマイク許可とHTTPS接続を確認してください。\\n'+e.message)}}
+function autoCorrelate(buf,sr){
+ const size=buf.length;
+ let rms=0;
+ for(let i=0;i<size;i++)rms+=buf[i]*buf[i];
+ rms=Math.sqrt(rms/size);
+ if(rms<0.006)return -1;
+
+ // Integer lag values are essential: fractional array indexes return undefined.
+ const minLag=Math.max(2,Math.floor(sr/1000));
+ const maxLag=Math.min(size-2,Math.ceil(sr/75));
+ let bestLag=-1,bestCorr=0;
+ for(let lag=minLag;lag<=maxLag;lag++){
+  let corr=0,n=size-lag;
+  for(let i=0;i<n;i++)corr+=buf[i]*buf[i+lag];
+  corr/=n;
+  if(corr>bestCorr){bestCorr=corr;bestLag=lag}
+ }
+ if(bestLag<0||bestCorr<0.00002)return -1;
+
+ // Refine the peak with parabolic interpolation for smoother cent readings.
+ let refined=bestLag;
+ if(bestLag>minLag&&bestLag<maxLag){
+  const corrAt=lag=>{let s=0,n=size-lag;for(let i=0;i<n;i++)s+=buf[i]*buf[i+lag];return s/n};
+  const a=corrAt(bestLag-1),b=bestCorr,c=corrAt(bestLag+1);
+  const denom=a-2*b+c;
+  if(Math.abs(denom)>1e-12)refined+=0.5*(a-c)/denom;
+ }
+ return sr/refined;
+}
+async function startMic(){try{if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia)throw new Error('このブラウザではマイク入力を利用できません。Safariを最新版に更新して再読み込みしてください。');const C=window.AudioContext||window.webkitAudioContext;if(!C)throw new Error('Web Audio APIに対応していません。');if(!audioCtx)audioCtx=new C();await audioCtx.resume();stream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:false,noiseSuppression:false,autoGainControl:false}});let src=audioCtx.createMediaStreamSource(stream);analyser=audioCtx.createAnalyser();analyser.fftSize=4096;src.connect(analyser);running=true;$('micBtn').disabled=true;$('stopBtn').disabled=false;$('voiceHz').textContent='音を検出中…';let buf=new Float32Array(analyser.fftSize);function loop(){if(!running)return;analyser.getFloatTimeDomainData(buf);let f=autoCorrelate(buf,audioCtx.sampleRate);if(f>0&&f<1200){let midi=69+12*Math.log2(f/440),nearest=Math.round(midi),c=(midi-target)*100;$('voiceNote').textContent=noteName(nearest);$('voiceHz').textContent=f.toFixed(1)+' Hz';$('cents').textContent=(c>0?'+':'')+c.toFixed(0);let clamped=Math.max(-50,Math.min(50,c));$('needle').style.left=(50+clamped)+'%';let ok=Math.abs(c)<=20;$('feedback').textContent=Math.abs(c)<=5?'ぴったり！🎉':ok?'いい感じ！':'もう少し'+(c<0?'高く':'低く');$('feedback').className='status '+(ok?'good':'bad');$('subfeedback').textContent= c<0?'声を少し高くしてみよう。':'声を少し低くしてみよう。';if(mode==='test'&&window.challenge){samples++;if(ok)hits++;$('score').textContent=Math.round(hits/samples*100)+'%';$('scoreDetail').textContent=samples+'回検出 · ±20 cent以内 '+hits+'回'} }else{$('voiceNote').textContent='—';$('voiceHz').textContent='音を検出できません';$('cents').textContent='—';$('needle').style.left='50%';$('feedback').textContent='声を検出できていません';$('subfeedback').textContent='少し長めに「あー」と声を出してみてね。'}raf=requestAnimationFrame(loop)}loop()}catch(e){alert('マイクを開始できませんでした。ブラウザのマイク許可とHTTPS接続を確認してください。\\n'+e.message)}}
 function stopMic(){running=false;if(raf)cancelAnimationFrame(raf);if(stream)stream.getTracks().forEach(t=>t.stop());stream=null;$('micBtn').disabled=false;$('stopBtn').disabled=true;$('voiceNote').textContent='—';$('voiceHz').textContent='マイク未接続'}
 $('range').onchange=fillNotes;$('noteSelect').onchange=updateTarget;$('playBtn').onclick=playTone;$('listenBtn').onclick=playTone;$('micBtn').onclick=startMic;$('stopBtn').onclick=stopMic;
 $('liveTab').onclick=()=>{mode='live';window.challenge=false;$('liveTab').classList.add('active');$('testTab').classList.remove('active');$('testPanel').classList.remove('hidden');$('feedback').textContent='リアルタイムで音程を確認できます'};
