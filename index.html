@@ -33,7 +33,10 @@ h1{font-size:clamp(27px,5vw,42px);margin:28px 0 8px}.lead{color:var(--muted);mar
  <section class="panel" id="testPanel">
   <div class="label">聴いてから挑戦モード</div><h2 style="margin:6px 0 8px">音を覚えて、歌ってみよう</h2>
   <p class="hint">お手本を再生したあと、マイクを開始して声を出してください。歌っている間の音程を判定します。</p>
-  <div class="controls"><button class="primary" id="listenBtn">♪ お手本を聴く</button><button id="readyBtn">挑戦スタート</button></div>
+  <div class="label" style="margin-top:14px">メロディ練習（ドレミファソファミレドミソミド）</div>
+  <div class="hint">選んだ「ド」を基準に、13音のメロディを練習します。</div>
+  <div class="controls"><button class="primary" id="listenBtn">♪ 単音のお手本</button><button id="sequenceBtn">♫ メロディを聴く</button><button id="readyBtn">メロディに挑戦</button></div>
+  <div class="center" style="margin-top:12px"><div class="label">メロディの進行</div><div id="sequenceDisplay" style="font-size:24px;font-weight:800;letter-spacing:.12em;line-height:1.8">ド レ ミ ファ ソ ファ ミ レ ド ミ ソ ミ ド</div><div class="hint" id="sequenceStatus">まずはお手本を聴いてみよう</div></div>
   <div class="center" style="margin-top:15px"><div class="label">今回の正確度（検出できた音のうち ±20 cent以内）</div><div class="score" id="score">—</div><div class="hint" id="scoreDetail">マイクを開始すると計測します。</div></div>
  </section>
  <section class="panel"><b>使い方</b><ol class="hint"><li>「お手本を鳴らす」で音を聴きます。</li><li>「マイクを開始」を押して、ブラウザのマイク使用を許可します。</li><li>お手本と同じ高さで「あー」と声を伸ばします。</li><li>ズレが0 centに近づくように声を調整します。</li></ol><p class="hint">※マイクはこのページ内で音程解析に使用します。音声を録音・送信・保存しません。マイク利用にはHTTPSまたはlocalhostが必要な場合があります。</p></section>
@@ -45,8 +48,9 @@ const names=['C','C♯','D','D♯','E','F','F♯','G','G♯','A','A♯','B'];
 let target=69, audioCtx=null, osc=null, stream=null, analyser=null, raf=null, mode='live', running=false, samples=0, hits=0;
 function freq(m){return 440*Math.pow(2,(m-69)/12)}
 function noteName(m){return names[(m%12+12)%12]+(Math.floor(m/12)-1)}
-function fillNotes(){let base=$('range').value==='low'?48:$('range').value==='high'?72:60;let s=$('noteSelect');s.innerHTML='';for(let i=0;i<12;i++){let m=base+i,o=document.createElement('option');o.value=m;o.textContent=noteName(m);s.append(o)}s.value=target=base+9;updateTarget()}
-function updateTarget(){target=+ $('noteSelect').value;$('targetNote').textContent=noteName(target);$('targetHz').textContent=freq(target).toFixed(2)+' Hz';$('feedback').textContent='お手本を聴いてみよう';$('subfeedback').textContent='同じ高さの声を出してみてね。'}
+const solfege=['ド','ド♯/レ♭','レ','レ♯/ミ♭','ミ','ファ','ファ♯/ソ♭','ソ','ソ♯/ラ♭','ラ','ラ♯/シ♭','シ'];
+function fillNotes(){let base=$('range').value==='low'?48:$('range').value==='high'?72:60;let s=$('noteSelect');s.innerHTML='';for(let i=0;i<12;i++){let m=base+i,o=document.createElement('option');o.value=m;o.textContent=solfege[i]+'（'+noteName(m)+'）';s.append(o)}s.value=target=base;updateTarget()}
+function updateTarget(){target=+ $('noteSelect').value;$('targetNote').textContent=solfege[(target%12+12)%12]+'（'+noteName(target)+'）';$('targetHz').textContent=freq(target).toFixed(2)+' Hz';$('feedback').textContent='お手本を聴いてみよう';$('subfeedback').textContent='同じ高さの声を出してみてね。'}
 function playTone(){const C=window.AudioContext||window.webkitAudioContext;if(!audioCtx)audioCtx=new C();audioCtx.resume();if(osc){try{osc.stop()}catch(e){}}osc=audioCtx.createOscillator();let gain=audioCtx.createGain();osc.type='sine';osc.frequency.value=freq(target);gain.gain.setValueAtTime(.0001,audioCtx.currentTime);gain.gain.exponentialRampToValueAtTime(.22,audioCtx.currentTime+.03);gain.gain.setTargetAtTime(.0001,audioCtx.currentTime+.85,.12);osc.connect(gain);gain.connect(audioCtx.destination);osc.start();osc.stop(audioCtx.currentTime+1.2)}
 function autoCorrelate(buf,sr){
  const size=buf.length;
@@ -96,9 +100,57 @@ function autoCorrelate(buf,sr){
  }
  return sr/refined;
 }
-async function startMic(){try{if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia)throw new Error('このブラウザではマイク入力を利用できません。Safariを最新版に更新して再読み込みしてください。');const C=window.AudioContext||window.webkitAudioContext;if(!C)throw new Error('Web Audio APIに対応していません。');if(!audioCtx)audioCtx=new C();await audioCtx.resume();stream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:false,noiseSuppression:false,autoGainControl:false}});let src=audioCtx.createMediaStreamSource(stream);analyser=audioCtx.createAnalyser();analyser.fftSize=8192;src.connect(analyser);running=true;$('micBtn').disabled=true;$('stopBtn').disabled=false;$('voiceHz').textContent='音を検出中…';let buf=new Float32Array(analyser.fftSize);function loop(){if(!running)return;analyser.getFloatTimeDomainData(buf);let f=autoCorrelate(buf,audioCtx.sampleRate);if(f>0&&f<1200){let midi=69+12*Math.log2(f/440),nearest=Math.round(midi),c=(midi-target)*100;$('voiceNote').textContent=noteName(nearest);$('voiceHz').textContent=f.toFixed(1)+' Hz';$('cents').textContent=(c>0?'+':'')+c.toFixed(0);let clamped=Math.max(-50,Math.min(50,c));$('needle').style.left=(50+clamped)+'%';let ok=Math.abs(c)<=20;$('feedback').textContent=Math.abs(c)<=5?'ぴったり！🎉':ok?'いい感じ！':'もう少し'+(c<0?'高く':'低く');$('feedback').className='status '+(ok?'good':'bad');$('subfeedback').textContent= c<0?'声を少し高くしてみよう。':'声を少し低くしてみよう。';if(mode==='test'&&window.challenge){samples++;if(ok)hits++;$('score').textContent=Math.round(hits/samples*100)+'%';$('scoreDetail').textContent=samples+'回検出 · ±20 cent以内 '+hits+'回'} }else{$('voiceNote').textContent='—';$('voiceHz').textContent='音を検出できません';$('cents').textContent='—';$('needle').style.left='50%';$('feedback').textContent='声を検出できていません';$('subfeedback').textContent='少し長めに「あー」と声を出してみてね。'}raf=requestAnimationFrame(loop)}loop()}catch(e){alert('マイクを開始できませんでした。ブラウザのマイク許可とHTTPS接続を確認してください。\\n'+e.message)}}
+const melody=[0,2,4,5,7,5,4,2,0,4,7,4,0];
+let sequenceTimer=null, sequenceStep=-1, sequenceStart=0, sequenceActive=false;
+function melodyMidi(){return melody.map(x=>target+x)}
+function showSequenceStep(i){
+ const labels=melody.map((x,j)=>j===i?'【'+solfege[x]+'】':solfege[x]);
+ $('sequenceDisplay').textContent=labels.join(' ');
+}
+function playMelody(){
+ const C=window.AudioContext||window.webkitAudioContext;
+ if(!audioCtx)audioCtx=new C();
+ audioCtx.resume();
+ if(sequenceTimer)clearTimeout(sequenceTimer);
+ sequenceActive=false;sequenceStep=-1;
+ const notes=melodyMidi(), beat=0.48, gap=0.08;
+ notes.forEach((m,i)=>{
+  const t=audioCtx.currentTime+i*(beat+gap);
+  const o=audioCtx.createOscillator(),g=audioCtx.createGain();
+  o.type='sine';o.frequency.value=freq(m);
+  g.gain.setValueAtTime(0.0001,t);
+  g.gain.exponentialRampToValueAtTime(0.18,t+0.025);
+  g.gain.setTargetAtTime(0.0001,t+beat-0.05,0.045);
+  o.connect(g);g.connect(audioCtx.destination);o.start(t);o.stop(t+beat);
+ });
+ $('sequenceStatus').textContent='お手本を再生中…';
+ melody.forEach((_,i)=>setTimeout(()=>{showSequenceStep(i);},i*(beat+gap)*1000));
+ setTimeout(()=>{$('sequenceStatus').textContent='お手本の再生が終わったよ';showSequenceStep(-1)},notes.length*(beat+gap)*1000);
+}
+function startMelodyChallenge(){
+ mode='test';window.challenge=true;samples=hits=0;
+ $('score').textContent='0%';$('scoreDetail').textContent='準備中…';
+ $('sequenceStatus').textContent='マイクを準備してね。メロディを順番に歌おう';
+ sequenceActive=true;sequenceStart=performance.now();sequenceStep=0;
+ if(!running)startMic();
+}
+async function startMic(){try{if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia)throw new Error('このブラウザではマイク入力を利用できません。Safariを最新版に更新して再読み込みしてください。');const C=window.AudioContext||window.webkitAudioContext;if(!C)throw new Error('Web Audio APIに対応していません。');if(!audioCtx)audioCtx=new C();await audioCtx.resume();stream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:false,noiseSuppression:false,autoGainControl:false}});let src=audioCtx.createMediaStreamSource(stream);analyser=audioCtx.createAnalyser();analyser.fftSize=8192;src.connect(analyser);running=true;$('micBtn').disabled=true;$('stopBtn').disabled=false;$('voiceHz').textContent='音を検出中…';let buf=new Float32Array(analyser.fftSize);function loop(){if(!running)return;analyser.getFloatTimeDomainData(buf);let f=autoCorrelate(buf,audioCtx.sampleRate);if(f>0&&f<1200){let midi=69+12*Math.log2(f/440),nearest=Math.round(midi);
+ if(mode==='test'&&window.challenge&&sequenceActive){
+  const stepMs=560, elapsed=performance.now()-sequenceStart;
+  sequenceStep=Math.min(melody.length-1,Math.floor(elapsed/stepMs));
+  target=melodyMidi()[sequenceStep];showSequenceStep(sequenceStep);
+  $('targetNote').textContent=solfege[melody[sequenceStep]]+'（'+noteName(target)+'）';
+ }
+ let c=(midi-target)*100;$('voiceNote').textContent=noteName(nearest);$('voiceHz').textContent=f.toFixed(1)+' Hz';$('cents').textContent=(c>0?'+':'')+c.toFixed(0);let clamped=Math.max(-50,Math.min(50,c));$('needle').style.left=(50+clamped)+'%';let ok=Math.abs(c)<=20;$('feedback').textContent=Math.abs(c)<=5?'ぴったり！🎉':ok?'いい感じ！':'もう少し'+(c<0?'高く':'低く');$('feedback').className='status '+(ok?'good':'bad');$('subfeedback').textContent= c<0?'声を少し高くしてみよう。':'声を少し低くしてみよう。';if(mode==='test'&&window.challenge&&sequenceActive){
+  samples++;if(ok)hits++;
+  $('score').textContent=Math.round(hits/samples*100)+'%';
+  $('scoreDetail').textContent=samples+'回検出 · ±20 cent以内 '+hits+'回';
+  if(performance.now()-sequenceStart>=melody.length*560){
+   sequenceActive=false;$('sequenceStatus').textContent='メロディ終了！正確度を確認してみよう';showSequenceStep(-1);
+  }
+ } }else{$('voiceNote').textContent='—';$('voiceHz').textContent='音を検出できません';$('cents').textContent='—';$('needle').style.left='50%';$('feedback').textContent='声を検出できていません';$('subfeedback').textContent='少し長めに「あー」と声を出してみてね。'}raf=requestAnimationFrame(loop)}loop()}catch(e){alert('マイクを開始できませんでした。ブラウザのマイク許可とHTTPS接続を確認してください。\\n'+e.message)}}
 function stopMic(){running=false;if(raf)cancelAnimationFrame(raf);if(stream)stream.getTracks().forEach(t=>t.stop());stream=null;$('micBtn').disabled=false;$('stopBtn').disabled=true;$('voiceNote').textContent='—';$('voiceHz').textContent='マイク未接続'}
-$('range').onchange=fillNotes;$('noteSelect').onchange=updateTarget;$('playBtn').onclick=playTone;$('listenBtn').onclick=playTone;$('micBtn').onclick=startMic;$('stopBtn').onclick=stopMic;
+$('range').onchange=fillNotes;$('noteSelect').onchange=updateTarget;$('playBtn').onclick=playTone;$('listenBtn').onclick=playTone;$('sequenceBtn').onclick=playMelody;$('readyBtn').onclick=startMelodyChallenge;$('micBtn').onclick=startMic;$('stopBtn').onclick=stopMic;
 $('liveTab').onclick=()=>{mode='live';window.challenge=false;$('liveTab').classList.add('active');$('testTab').classList.remove('active');$('testPanel').classList.remove('hidden');$('feedback').textContent='リアルタイムで音程を確認できます'};
 $('testTab').onclick=()=>{mode='test';window.challenge=false;$('testTab').classList.add('active');$('liveTab').classList.remove('active');$('testPanel').classList.remove('hidden');$('feedback').textContent='まずお手本を聴いて覚えよう'};
 $('readyBtn').onclick=()=>{mode='test';window.challenge=true;samples=hits=0;$('score').textContent='0%';$('scoreDetail').textContent='計測中… マイクを開始して歌ってね。';if(!running)startMic()};
@@ -106,6 +158,6 @@ fillNotes();
 </script>
 <footer>
  <div>Pitch Trainer</div>
- <div class="version" id="appVersion">VERSION 1.2.0 · BUILD 2026-10-30</div>
+ <div class="version" id="appVersion">VERSION 1.3.0 · BUILD 2026-10-30</div>
 </footer>
 </body></html>
